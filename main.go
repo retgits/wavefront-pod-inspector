@@ -5,35 +5,50 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
 )
 
-// WavefrontQuery is the response object coming from WaveFront
-type WavefrontQuery []WavefrontQueryElement
-
-// WavefrontQueryElement is a single element from the WaveFront query result
-type WavefrontQueryElement struct {
-	Tags   Tags    `json:"tags"`
-	Points []Point `json:"points"`
+// WavefrontQuery is the response coming from WaveFront
+type WavefrontQuery struct {
+	Query       string           `json:"query"`
+	Name        string           `json:"name"`
+	Granularity int64            `json:"granularity"`
+	Timeseries  []Timeserie      `json:"timeseries"`
+	Stats       map[string]int64 `json:"stats"`
 }
 
-// Point is a single datapoint
-type Point struct {
-	Value     float64 `json:"value"`
-	Timestamp int64   `json:"timestamp"`
+// Timeserie is a single TimeSeries
+type Timeserie struct {
+	Label string      `json:"label"`
+	Host  string      `json:"host"`
+	Tags  Tags        `json:"tags"`
+	Data  [][]float64 `json:"data"`
 }
 
-// Tags are ...
+// Tags is ...
 type Tags struct {
-	CPU string `json:"cpu"`
+	NamespaceName        string  `json:"namespace_name"`
+	Cluster              string  `json:"cluster"`
+	LabelK8SApp          *string `json:"label.k8s-app,omitempty"`
+	PodName              string  `json:"pod_name"`
+	Type                 string  `json:"type"`
+	Nodename             string  `json:"nodename"`
+	LabelTier            *string `json:"label.tier,omitempty"`
+	LabelApp             *string `json:"label.app,omitempty"`
+	LabelPodTemplateHash *string `json:"label.pod-template-hash,omitempty"`
+	LabelVersion         *string `json:"label.version,omitempty"`
+	LabelName            *string `json:"label.name,omitempty"`
+	LabelK8SAddon        *string `json:"label.k8s-addon,omitempty"`
 }
 
 // Config is the configuration struct getting values from the command line
 type Config struct {
-	Source    string        `required:"true"`
 	Metric    string        `required:"true"`
+	Cluster   string        `required:"true"`
+	PodName   string        `required:"true" split_words:"true"`
 	APIToken  string        `required:"true" split_words:"true"`
 	TimeLimit time.Duration `default:"30s" split_words:"true"`
 	Threshold float64       `default:"1"`
@@ -48,7 +63,16 @@ func main() {
 
 	startTime := getEpochMillis(time.Now().Add(-1 * config.TimeLimit))
 
-	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/raw?source=%s&metric=%s&startTime=%d", config.Source, config.Metric, startTime)
+	params := url.Values{}
+	params.Add("q", fmt.Sprintf("ts(\"%s\", cluster=\"%s\") * 100", config.Metric, config.Cluster))
+	params.Add("s", fmt.Sprintf("%d", startTime))
+	params.Add("g", "m")
+	params.Add("sorted", "false")
+	params.Add("cached", "true")
+
+	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/api?%s", params.Encode())
+
+	fmt.Println(url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -73,18 +97,22 @@ func main() {
 		panic(err)
 	}
 
-	pointAverage := calculatePointAverage(queryData[0].Points)
+	for _, series := range queryData.Timeseries {
+		if series.Tags.PodName == config.PodName {
+			pointAverage := calculatePointAverage(series.Data)
 
-	var message string
+			var message string
 
-	if pointAverage > config.Threshold {
-		message = fmt.Sprintf("ALERT! avg CPU usage: %f", pointAverage)
-		ioutil.WriteFile("./alert", nil, 0644)
-	} else {
-		message = fmt.Sprintf("No worries, the avg CPU usage is %f (which is less than %f)", pointAverage, config.Threshold)
+			if pointAverage > config.Threshold {
+				message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
+				ioutil.WriteFile("./alert", nil, 0644)
+			} else {
+				message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
+			}
+
+			fmt.Println(message)
+		}
 	}
-
-	fmt.Println(message)
 }
 
 func unmarshalWavefrontQuery(data []byte) (WavefrontQuery, error) {
@@ -97,11 +125,11 @@ func getEpochMillis(timestamp time.Time) int64 {
 	return timestamp.UnixNano() / int64(time.Millisecond)
 }
 
-func calculatePointAverage(points []Point) float64 {
+func calculatePointAverage(points [][]float64) float64 {
 	var sum float64
 
 	for _, point := range points {
-		sum = sum + point.Value
+		sum = sum + point[1]
 	}
 
 	return sum / float64(len(points))

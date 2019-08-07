@@ -19,10 +19,11 @@ docker build . -t vmwarecloudadvocacy/wavefront
 
 ## Run
 
-To run the app, there are three mandatory environment variables that need to be set:
+To run the app, there are four mandatory environment variables that need to be set:
 
-* SOURCE: source to query ingested points for (cannot contain wildcards). host or source is equivalent, only one should be used.
 * METRIC: metric to query ingested points for (cannot contain wildcards)
+* CLUSTER: the Kubernetes cluster to look at (cannot contain wildcards)
+* PodName: the pod name to inspect (cannot contain wildcards)
 * API_TOKEN: a Wavefront API token (see the [docs](https://docs.wavefront.com/wavefront_api.html) on how to get one)
 
 There are two optional environment variables that can be set
@@ -35,8 +36,9 @@ There are two optional environment variables that can be set
 To run the app as a standalone executable, using all the above settings:
 
 ```bash
-export SOURCE=api2-fit-b-m-us-e1-00-m
-export METRIC=cpu.usage.user
+export METRIC=heapster.pod.cpu.usage_rate
+export CLUSTER=fitcycle-api-dev-k8s-cluster
+export POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal
 export API_TOKEN=xyz
 export TIME_LIMIT=30s
 export THRESHOLD=0.9
@@ -48,7 +50,7 @@ export THRESHOLD=0.9
 To run the Docker image and pass in the variables as command-line arguments:
 
 ```
-docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=cpu.usage.user -e API_TOKEN=xyz -e TIME_LIMIT=30s -e THRESHOLD=0.9 vmwarecloudadvocacy/wavefront
+docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=heapster.pod.cpu.usage_rate -e CLUSTER=fitcycle-api-dev-k8s-cluster -e API_TOKEN=xyz -e POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal -e TIME_LIMIT=30s -e THRESHOLD=0.9 vmwarecloudadvocacy/wavefront
 ```
 
 ## Output
@@ -56,13 +58,13 @@ docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=cpu.usage.user -
 ### With alert
 
 ```bash
-ALERT! avg CPU usage: 1.100968
+ALERT! avg heapster.pod.cpu.usage_rate: 400.000000
 ```
 
 ### No alert
 
 ```bash
-No worries, the avg CPU usage is 0.802476 (which is less than 0.900000)
+No worries, the avg heapster.pod.cpu.usage_rate is 0.802476 (which is less than 0.900000)
 ```
 
 ## Use in GitLab CI
