@@ -23,7 +23,7 @@ To run the app, there are four mandatory environment variables that need to be s
 
 * METRIC: metric to query ingested points for (cannot contain wildcards)
 * CLUSTER: the Kubernetes cluster to look at (cannot contain wildcards)
-* PodName: the pod name to inspect (cannot contain wildcards)
+* POD_NAME: the pod name to inspect (cannot contain wildcards)
 * API_TOKEN: a Wavefront API token (see the [docs](https://docs.wavefront.com/wavefront_api.html) on how to get one)
 
 There are two optional environment variables that can be set
