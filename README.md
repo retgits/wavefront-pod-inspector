@@ -1,17 +1,25 @@
-# WaveFront Check App
+# Wavefront Pod Inspector
+
+The *Wavefront Pod Inspector* is an app that uses the Wavefront API to get data on pods in a specific Kubernetes cluster. Using environment variables you can specify which metric and which pod should be looked at.
+
+## Requirements
+
+To be able to build and run the app you'll need:
+
+* Go 1.12 or higher
+* A Wavefront API Token (see the [docs](https://docs.wavefront.com/wavefront_api.html) on how to get one)
+* Docker (optional, in case you want to run the app as a Docker container)
 
 ## Build
 
-You can build the app as a standalone executable (Go app) or as a Docker image
-
-### Go app
+To build a standalone executable, run
 
 ```bash
 export GOPROXY=https://gocenter.io
 CGO_ENABLED=0 go build --ldflags "-s -w" -o wavefront .
 ```
 
-### Docker image
+To build a Docker image with the app embedded in it, run
 
 ```bash
 docker build . -t vmwarecloudadvocacy/wavefront
@@ -21,17 +29,15 @@ docker build . -t vmwarecloudadvocacy/wavefront
 
 To run the app, there are four mandatory environment variables that need to be set:
 
-* METRIC: metric to query ingested points for (cannot contain wildcards)
-* CLUSTER: the Kubernetes cluster to look at (cannot contain wildcards)
-* POD_NAME: the pod name to inspect (cannot contain wildcards)
-* API_TOKEN: a Wavefront API token (see the [docs](https://docs.wavefront.com/wavefront_api.html) on how to get one)
+* **METRIC**: metric to query ingested points for (cannot contain wildcards)
+* **CLUSTER**: the Kubernetes cluster to look at (cannot contain wildcards)
+* **POD_NAME**: the pod name to inspect (cannot contain wildcards)
+* **API_TOKEN**: a Wavefront API token
 
-There are two optional environment variables that can be set
+There are two optional environment variables that can be set:
 
-* TIME_LIMIT: the duration in time from 'now' the metric data will be requested (must end with a qualifier like `s`, `m`, or `h`. Defaults to `30s`)
-* THRESHOLD: the threshold setting, above which an alert is printed (defaults to `1`)
-
-### Go app
+* **TIME_LIMIT**: the duration in time from 'now' the metric data will be requested (must end with a qualifier like `s`, `m`, or `h`. Defaults to `30s`)
+* **THRESHOLD**: the threshold setting, above which an alert is printed (defaults to `1`)
 
 To run the app as a standalone executable, using all the above settings:
 
@@ -45,8 +51,6 @@ export THRESHOLD=0.9
 ./wavefront
 ```
 
-### Docker image
-
 To run the Docker image and pass in the variables as command-line arguments:
 
 ```
@@ -55,15 +59,13 @@ docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=heapster.pod.cpu
 
 ## Output
 
-### With alert
+When you run the app, the output will either be an "alert" (when the average value is above the threshold value) or a message indicating all is okay.
 
 ```bash
+# Average exceeds threshold
 ALERT! avg heapster.pod.cpu.usage_rate: 400.000000
-```
 
-### No alert
-
-```bash
+# Average below threshold
 No worries, the avg heapster.pod.cpu.usage_rate is 0.802476 (which is less than 0.900000)
 ```
 

@@ -55,14 +55,17 @@ type Config struct {
 }
 
 func main() {
+	// Get configuration set using environment variables
 	var config Config
 	err := envconfig.Process("", &config)
 	if err != nil {
 		panic(err)
 	}
 
+	// Calculate the epoch in milliseconds for the timelimit
 	startTime := getEpochMillis(time.Now().Add(-1 * config.TimeLimit))
 
+	// Set URL parameters for the query to Wavefront
 	params := url.Values{}
 	params.Add("q", fmt.Sprintf("ts(\"%s\", cluster=\"%s\") * 100", config.Metric, config.Cluster))
 	params.Add("s", fmt.Sprintf("%d", startTime))
@@ -72,37 +75,45 @@ func main() {
 
 	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/api?%s", params.Encode())
 
-	fmt.Println(url)
-
+	// Create the HTTP request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
 
+	// Add the authorization header
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", config.APIToken))
 
+	// Call Wavefront
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		panic(err)
 	}
 
 	defer res.Body.Close()
+
+	// Get the body data
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		panic(err)
 	}
 
+	// Unmarshal the JSON payload into a struct
 	queryData, err := unmarshalWavefrontQuery(body)
 	if err != nil {
 		panic(err)
 	}
 
+	// Loop over the Timeseries data and find the element where the tag podname
+	// is equal to the podname that is requested
 	for _, series := range queryData.Timeseries {
 		if series.Tags.PodName == config.PodName {
 			pointAverage := calculatePointAverage(series.Data)
 
 			var message string
 
+			// If the calculated average exceeds the threshold, print an alert and create an empty file
+			// that can be acted upon
 			if pointAverage > config.Threshold {
 				message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
 				ioutil.WriteFile("./alert", nil, 0644)
@@ -115,16 +126,19 @@ func main() {
 	}
 }
 
+// unmarshalWavefrontQuery takes a byte array representing a JSON payload and returns a struct, or an error
 func unmarshalWavefrontQuery(data []byte) (WavefrontQuery, error) {
 	var r WavefrontQuery
 	err := json.Unmarshal(data, &r)
 	return r, err
 }
 
+// getEpochMillis calculates the epoch in milliseconds for a given time
 func getEpochMillis(timestamp time.Time) int64 {
 	return timestamp.UnixNano() / int64(time.Millisecond)
 }
 
+// calculatePointAverage calculates an unweighted average across timeseries data coming from Wavefront
 func calculatePointAverage(points [][]float64) float64 {
 	var sum float64
 
