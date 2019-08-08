@@ -1,4 +1,4 @@
-module github.com/retgits/wavefront-api
+module github.com/retgits/wavefront-pod-inspector
 
 go 1.12
 
