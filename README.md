@@ -33,11 +33,15 @@ To run the app, there are four mandatory environment variables that need to be s
 * **CLUSTER**: the Kubernetes cluster to look at (cannot contain wildcards)
 * **POD_NAME**: the pod name to inspect (cannot contain wildcards)
 * **API_TOKEN**: a Wavefront API token
+* **WAVEFRONT_VARIABLE** the name of the variable in GitLab CI to update when the Wavefront validation fails
+* **GITLAB_TOKEN** the GitLab API token
 
 There are two optional environment variables that can be set:
 
 * **TIME_LIMIT**: the duration in time from 'now' the metric data will be requested (must end with a qualifier like `s`, `m`, or `h`. Defaults to `30s`)
 * **THRESHOLD**: the threshold setting, above which an alert is printed (defaults to `1`)
+
+The app also relies on the existence of `CI_PROJECT_NAME`, coming from the default environment variables set by the GitLab CI runner
 
 To run the app as a standalone executable, using all the above settings:
 
@@ -69,10 +73,16 @@ ALERT! avg heapster.pod.cpu.usage_rate: 400.000000
 No worries, the avg heapster.pod.cpu.usage_rate is 0.802476 (which is less than 0.900000)
 ```
 
+When the output is above the threshold (when the alert text is displayed), the app also tries to update an environment variable setting in GitLab CI
+
 ## Use in GitLab CI
 
 To use the app in GitLab CI as part of a processing step
 
+Either use the textfile which is created
+
 ```bash
 if [ -f "alert" ]; then exit 1 && echo "alert"; else echo "Within range. Continuing!"; fi
 ```
+
+Or use the environment variable that was passed in.
