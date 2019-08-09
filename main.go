@@ -48,14 +48,13 @@ type Tags struct {
 
 // Config is the configuration struct getting values from the command line
 type Config struct {
-	GitlabToken       string        `required:"true" split_words:"true"`
-	WavefrontVariable string        `required:"true" split_words:"true"`
-	Metric            string        `required:"true"`
-	Cluster           string        `required:"true"`
-	PodName           string        `required:"true" split_words:"true"`
-	APIToken          string        `required:"true" split_words:"true"`
-	TimeLimit         time.Duration `default:"30s" split_words:"true"`
-	Threshold         float64       `default:"1"`
+	GitlabToken       string  `required:"true" split_words:"true"`
+	WavefrontVariable string  `required:"true" split_words:"true"`
+	Metric            string  `required:"true"`
+	Cluster           string  `required:"true"`
+	PodName           string  `required:"true" split_words:"true"`
+	APIToken          string  `required:"true" split_words:"true"`
+	Threshold         float64 `default:"1"`
 }
 
 // GitlabVar is a Gitlab Variable
@@ -74,17 +73,20 @@ func main() {
 	}
 
 	// Calculate the epoch in milliseconds for the timelimit
-	startTime := getEpochMillis(time.Now().Add(-1 * config.TimeLimit))
+	startTime := getEpochMillis(time.Now().Add(-3600 * time.Second))
 
 	// Set URL parameters for the query to Wavefront
 	params := url.Values{}
-	params.Add("q", fmt.Sprintf("ts(\"%s\", cluster=\"%s\") * 100", config.Metric, config.Cluster))
+	params.Add("q", fmt.Sprintf("ts(\"%s\", cluster=\"%s\" and pod_name=\"%s\")", config.Metric, config.Cluster, config.PodName))
 	params.Add("s", fmt.Sprintf("%d", startTime))
-	params.Add("g", "m")
+	params.Add("g", "h")
 	params.Add("sorted", "false")
 	params.Add("cached", "true")
+	params.Add("strict", "true")
 
 	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/api?%s", params.Encode())
+
+	fmt.Println(url)
 
 	// Create the HTTP request
 	req, err := http.NewRequest("GET", url, nil)
@@ -117,25 +119,17 @@ func main() {
 
 	// Loop over the Timeseries data and find the element where the tag podname
 	// is equal to the podname that is requested
-	for _, series := range queryData.Timeseries {
-		if series.Tags.PodName == config.PodName {
-			pointAverage := calculatePointAverage(series.Data)
-
-			var message string
-
-			// If the calculated average exceeds the threshold, print an alert and create an empty file
-			// that can be acted upon
-			if pointAverage > config.Threshold {
-				message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
-				ioutil.WriteFile("./alert", nil, 0644)
-				updateGitlabVars()
-			} else {
-				message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
-			}
-
-			fmt.Println(message)
-		}
+	var message string
+	pointAverage := queryData.Timeseries[0].Data[0][1]
+	if pointAverage > config.Threshold {
+		message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
+		ioutil.WriteFile("./alert", nil, 0644)
+		updateGitlabVars()
+	} else {
+		message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
 	}
+
+	fmt.Println(message)
 }
 
 // unmarshalWavefrontQuery takes a byte array representing a JSON payload and returns a struct, or an error
@@ -148,17 +142,6 @@ func unmarshalWavefrontQuery(data []byte) (WavefrontQuery, error) {
 // getEpochMillis calculates the epoch in milliseconds for a given time
 func getEpochMillis(timestamp time.Time) int64 {
 	return timestamp.UnixNano() / int64(time.Millisecond)
-}
-
-// calculatePointAverage calculates an unweighted average across timeseries data coming from Wavefront
-func calculatePointAverage(points [][]float64) float64 {
-	var sum float64
-
-	for _, point := range points {
-		sum = sum + point[1]
-	}
-
-	return sum / float64(len(points))
 }
 
 func updateGitlabVars() {

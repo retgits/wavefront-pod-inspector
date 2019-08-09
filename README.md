@@ -36,9 +36,8 @@ To run the app, there are four mandatory environment variables that need to be s
 * **WAVEFRONT_VARIABLE** the name of the variable in GitLab CI to update when the Wavefront validation fails
 * **GITLAB_TOKEN** the GitLab API token
 
-There are two optional environment variables that can be set:
+There is one optional environment variable that can be set:
 
-* **TIME_LIMIT**: the duration in time from 'now' the metric data will be requested (must end with a qualifier like `s`, `m`, or `h`. Defaults to `30s`)
 * **THRESHOLD**: the threshold setting, above which an alert is printed (defaults to `1`)
 
 The app also relies on the existence of `CI_PROJECT_NAME`, coming from the default environment variables set by the GitLab CI runner
@@ -46,12 +45,13 @@ The app also relies on the existence of `CI_PROJECT_NAME`, coming from the defau
 To run the app as a standalone executable, using all the above settings:
 
 ```bash
-export METRIC=heapster.pod.cpu.usage_rate
+export METRIC=heapster.pod_container.cpu.usage_rate
 export CLUSTER=fitcycle-api-dev-k8s-cluster
 export POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal
 export API_TOKEN=xyz
-export TIME_LIMIT=30s
 export THRESHOLD=0.9
+export WAVEFRONT_VARIABLE=abc
+export GITLAB_TOKEN=def
 ./wavefront
 ```
 
