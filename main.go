@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -46,17 +48,26 @@ type Tags struct {
 
 // Config is the configuration struct getting values from the command line
 type Config struct {
-	Metric    string        `required:"true"`
-	Cluster   string        `required:"true"`
-	PodName   string        `required:"true" split_words:"true"`
-	APIToken  string        `required:"true" split_words:"true"`
-	TimeLimit time.Duration `default:"30s" split_words:"true"`
-	Threshold float64       `default:"1"`
+	GitlabToken       string        `required:"true" split_words:"true"`
+	WavefrontVariable string        `required:"true" split_words:"true"`
+	Metric            string        `required:"true"`
+	Cluster           string        `required:"true"`
+	PodName           string        `required:"true" split_words:"true"`
+	APIToken          string        `required:"true" split_words:"true"`
+	TimeLimit         time.Duration `default:"30s" split_words:"true"`
+	Threshold         float64       `default:"1"`
 }
+
+// GitlabVar is a Gitlab Variable
+type GitlabVar struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+var config Config
 
 func main() {
 	// Get configuration set using environment variables
-	var config Config
 	err := envconfig.Process("", &config)
 	if err != nil {
 		panic(err)
@@ -117,6 +128,7 @@ func main() {
 			if pointAverage > config.Threshold {
 				message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
 				ioutil.WriteFile("./alert", nil, 0644)
+				updateGitlabVars()
 			} else {
 				message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
 			}
@@ -147,4 +159,39 @@ func calculatePointAverage(points [][]float64) float64 {
 	}
 
 	return sum / float64(len(points))
+}
+
+func updateGitlabVars() {
+	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "vmware-cloud-advocacy%2f", os.Getenv("CI_PROJECT_NAME"), config.WavefrontVariable)
+
+	gVar := GitlabVar{
+		Key:   config.WavefrontVariable,
+		Value: "false",
+	}
+
+	payload, err := gVar.Marshal()
+	if err != nil {
+		panic(err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(payload))
+	if err != nil {
+		panic(err)
+	}
+
+	req.Header.Add("private-token", config.GitlabToken)
+	req.Header.Add("content-type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+
+	defer res.Body.Close()
+
+	fmt.Println(res)
+}
+
+func (r *GitlabVar) Marshal() ([]byte, error) {
+	return json.Marshal(r)
 }
