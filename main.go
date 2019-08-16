@@ -124,9 +124,10 @@ func main() {
 	if pointAverage > config.Threshold {
 		message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
 		ioutil.WriteFile("./alert", nil, 0644)
-		updateGitlabVars()
+		updateGitlabVars("failed")
 	} else {
 		message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
+		updateGitlabVars("passed")
 	}
 
 	fmt.Println(message)
@@ -144,13 +145,17 @@ func getEpochMillis(timestamp time.Time) int64 {
 	return timestamp.UnixNano() / int64(time.Millisecond)
 }
 
-func updateGitlabVars() {
+func updateGitlabVars(val string) {
 	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "vmware-cloud-advocacy%2f", os.Getenv("CI_PROJECT_NAME"), config.WavefrontVariable)
+
+	fmt.Println(url)
 
 	gVar := GitlabVar{
 		Key:   config.WavefrontVariable,
-		Value: "false",
+		Value: val,
 	}
+
+	fmt.Printf("Setting variable %s to %s\n", config.WavefrontVariable, val)
 
 	payload, err := gVar.Marshal()
 	if err != nil {
