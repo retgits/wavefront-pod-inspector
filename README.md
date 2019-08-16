@@ -22,43 +22,47 @@ CGO_ENABLED=0 go build --ldflags "-s -w" -o wavefront .
 To build a Docker image with the app embedded in it, run
 
 ```bash
-docker build . -t vmwarecloudadvocacy/wavefront
+docker build . -t retgits/wavefront-pod-inspector
 ```
 
 ## Run
 
-To run the app, there are four mandatory environment variables that need to be set:
+### Mandatory environment variables
 
-* **METRIC**: metric to query ingested points for (cannot contain wildcards)
-* **CLUSTER**: the Kubernetes cluster to look at (cannot contain wildcards)
-* **POD_NAME**: the pod name to inspect (cannot contain wildcards)
-* **API_TOKEN**: a Wavefront API token
-* **WAVEFRONT_VARIABLE** the name of the variable in GitLab CI to update when the Wavefront validation fails
 * **GITLAB_TOKEN** the GitLab API token
+* **API_TOKEN**: a Wavefront API token
+* **POD_NAME**: the pod name to inspect (cannot contain wildcards)
+* **CI_PROJECT_NAME** the name of the project in GitLab
 
-There is one optional environment variable that can be set:
+### Optional environment variables
 
+* **WAVEFRONT_VARIABLE** the name of the variable in GitLab CI to update with the Wavefront result (defaults to `abc`)
+* **METRIC**: metric to query ingested points for (cannot contain wildcards, defaults to `kubernetes.pod_container.cpu.usage_rate`)
+* **CLUSTER**: the Kubernetes cluster to look at (cannot contain wildcards, defaults to `acmefitness-aks-02`)
 * **THRESHOLD**: the threshold setting, above which an alert is printed (defaults to `1`)
-
-The app also relies on the existence of `CI_PROJECT_NAME`, coming from the default environment variables set by the GitLab CI runner
 
 To run the app as a standalone executable, using all the above settings:
 
 ```bash
-export METRIC=heapster.pod_container.cpu.usage_rate
-export CLUSTER=fitcycle-api-dev-k8s-cluster
-export POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal
-export API_TOKEN=xyz
-export THRESHOLD=0.9
-export WAVEFRONT_VARIABLE=abc
 export GITLAB_TOKEN=def
+export API_TOKEN=xyz
+export POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal
+export CI_PROJECT_NAME=vmworld2019-tim
+export WAVEFRONT_VARIABLE=abc
+export METRIC=kubernetes.pod_container.cpu.usage_rate
+export CLUSTER=acmefitness-aks-02
+export THRESHOLD=0.9
 ./wavefront
 ```
 
-To run the Docker image and pass in the variables as command-line arguments:
+With just the mandatory environment variables:
 
-```
-docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=heapster.pod.cpu.usage_rate -e CLUSTER=fitcycle-api-dev-k8s-cluster -e API_TOKEN=xyz -e POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal -e TIME_LIMIT=30s -e THRESHOLD=0.9 vmwarecloudadvocacy/wavefront
+```bash
+export GITLAB_TOKEN=def
+export API_TOKEN=xyz
+export POD_NAME=kube-scheduler-ip-172-20-45-146.us-west-2.compute.internal
+export CI_PROJECT_NAME=vmworld2019-tim
+./wavefront
 ```
 
 ## Output
@@ -66,11 +70,25 @@ docker run --rm -it -e SOURCE=api2-fit-b-m-us-e1-00-m -e METRIC=heapster.pod.cpu
 When you run the app, the output will either be an "alert" (when the average value is above the threshold value) or a message indicating all is okay.
 
 ```bash
-# Average exceeds threshold
-ALERT! avg heapster.pod.cpu.usage_rate: 400.000000
+--- Configuration Settings ---
+Wavefront Variable: abc
+Metric            : kubernetes.pod_container.cpu.usage_rate
+Cluster           : acmefitness-aks-02
+Pod               : tunnelfront-54989596f-t274l
+Threshold         : 1.000000
+GitLab Project    : vmworld2019-tim
 
-# Average below threshold
-No worries, the avg heapster.pod.cpu.usage_rate is 0.802476 (which is less than 0.900000)
+---  Calling Wavefront on  ---
+https://try.wavefront.com/api/v2/chart/api?cached=true&g=h&q=ts%28%22kubernetes.pod_container.cpu.usage_rate%22%2C+cluster%3D%22acmefitness-aks-02%22+and+pod_name%3D%22tunnelfront-54989596f-t274l%22%29&s=1565980438617&sorted=false&strict=true
+Wavefront response: 200 OK
+
+---   Calling GitLab on    ---
+https://gitlab.com/api/v4/projects/vmware-cloud-advocacy%2fvmworld2019-tim/variables/abc
+Setting abc to failed <-- this will be either failed or passed depending on whether the value is below the threshold or not
+GitLab response: 200 OK
+
+--- Wavefront Check Result ---
+ALERT! avg kubernetes.pod_container.cpu.usage_rate: 72.029412% <-- this message will show 'No worries' when the value is below the threshold
 ```
 
 When the output is above the threshold (when the alert text is displayed), the app also tries to update an environment variable setting in GitLab CI

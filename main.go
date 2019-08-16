@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -49,12 +48,13 @@ type Tags struct {
 // Config is the configuration struct getting values from the command line
 type Config struct {
 	GitlabToken       string  `required:"true" split_words:"true"`
-	WavefrontVariable string  `required:"true" split_words:"true"`
-	Metric            string  `required:"true"`
-	Cluster           string  `required:"true"`
-	PodName           string  `required:"true" split_words:"true"`
 	APIToken          string  `required:"true" split_words:"true"`
+	WavefrontVariable string  `default:"abc" split_words:"true"`
+	Metric            string  `default:"kubernetes.pod_container.cpu.usage_rate"`
+	Cluster           string  `default:"acmefitness-aks-02"`
+	PodName           string  `required:"true" split_words:"true"`
 	Threshold         float64 `default:"1"`
+	CiProjectName     string  `required:"true" split_words:"true"`
 }
 
 // GitlabVar is a Gitlab Variable
@@ -72,6 +72,9 @@ func main() {
 		panic(err)
 	}
 
+	// Print configuration
+	fmt.Printf("--- Configuration Settings ---\nWavefront Variable: %s\nMetric            : %s\nCluster           : %s\nPod               : %s\nThreshold         : %f\nGitLab Project    : %s\n\n", config.WavefrontVariable, config.Metric, config.Cluster, config.PodName, config.Threshold, config.CiProjectName)
+
 	// Calculate the epoch in milliseconds for the timelimit
 	startTime := getEpochMillis(time.Now().Add(-3600 * time.Second))
 
@@ -86,7 +89,7 @@ func main() {
 
 	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/api?%s", params.Encode())
 
-	fmt.Println(url)
+	fmt.Printf("---  Calling Wavefront on  ---\n%s\n", url)
 
 	// Create the HTTP request
 	req, err := http.NewRequest("GET", url, nil)
@@ -104,6 +107,8 @@ func main() {
 	}
 
 	defer res.Body.Close()
+
+	fmt.Printf("Wavefront response: %s\n\n", res.Status)
 
 	// Get the body data
 	body, err := ioutil.ReadAll(res.Body)
@@ -130,7 +135,7 @@ func main() {
 		updateGitlabVars("passed")
 	}
 
-	fmt.Println(message)
+	fmt.Printf("--- Wavefront Check Result ---\n%s", message)
 }
 
 // unmarshalWavefrontQuery takes a byte array representing a JSON payload and returns a struct, or an error
@@ -146,16 +151,14 @@ func getEpochMillis(timestamp time.Time) int64 {
 }
 
 func updateGitlabVars(val string) {
-	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "vmware-cloud-advocacy%2f", os.Getenv("CI_PROJECT_NAME"), config.WavefrontVariable)
-
-	fmt.Println(url)
+	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "vmware-cloud-advocacy%2f", config.CiProjectName, config.WavefrontVariable)
 
 	gVar := GitlabVar{
 		Key:   config.WavefrontVariable,
 		Value: val,
 	}
 
-	fmt.Printf("Setting variable %s to %s\n", config.WavefrontVariable, val)
+	fmt.Printf("---   Calling GitLab on    ---\n%s\nSetting %s to %s \n", url, config.WavefrontVariable, val)
 
 	payload, err := gVar.Marshal()
 	if err != nil {
@@ -177,7 +180,7 @@ func updateGitlabVars(val string) {
 
 	defer res.Body.Close()
 
-	fmt.Println(res)
+	fmt.Printf("GitLab response: %s\n\n", res.Status)
 }
 
 func (r *GitlabVar) Marshal() ([]byte, error) {
