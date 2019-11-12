@@ -8,7 +8,7 @@ COPY . .
 
 RUN GOPROXY="https://gocenter.io" CGO_ENABLED=0 GOOS=linux go build --ldflags "-s -w" -o wavefront .
 
-FROM alpine:3.10
+FROM bitnami/kubectl
 COPY --from=builder /home/app/wavefront /bin
-RUN apk add --no-cache ca-certificates
-CMD [ "wavefront" ]
+COPY --from=builder /home/app/entrypoint.sh /bin
+ENTRYPOINT [ "/bin/entrypoint.sh" ]
