@@ -48,11 +48,8 @@ type Tags struct {
 // Config is the configuration struct getting values from the command line
 type Config struct {
 	GitlabToken       string  `required:"true" split_words:"true"`
-	APIToken          string  `required:"true" split_words:"true"`
+	WavefrontToken    string  `required:"true" split_words:"true"`
 	WavefrontVariable string  `default:"abc" split_words:"true"`
-	Metric            string  `default:"kubernetes.pod_container.cpu.usage_rate"`
-	Cluster           string  `default:"acmefitness-aks-02"`
-	PodName           string  `required:"true" split_words:"true"`
 	Threshold         float64 `default:"1"`
 	CiProjectName     string  `required:"true" split_words:"true"`
 }
@@ -73,19 +70,18 @@ func main() {
 	}
 
 	// Print configuration
-	fmt.Printf("--- Configuration Settings ---\nWavefront Variable: %s\nMetric            : %s\nCluster           : %s\nPod               : %s\nThreshold         : %f\nGitLab Project    : %s\n\n", config.WavefrontVariable, config.Metric, config.Cluster, config.PodName, config.Threshold, config.CiProjectName)
+	fmt.Printf("--- Configuration Settings ---\nWavefront Variable: %s\nThreshold         : %f\nGitLab Project    : %s\n\n", config.WavefrontVariable, config.Threshold, config.CiProjectName)
 
 	// Calculate the epoch in milliseconds for the timelimit
 	startTime := getEpochMillis(time.Now().Add(-3600 * time.Second))
 
 	// Set URL parameters for the query to Wavefront
 	params := url.Values{}
-	params.Add("q", fmt.Sprintf("ts(\"%s\", cluster=\"%s\" and pod_name=\"%s\")", config.Metric, config.Cluster, config.PodName))
+	params.Add("q", "mavg(5m, ts(acmeserverless.gcr.payment.latency))")
 	params.Add("s", fmt.Sprintf("%d", startTime))
 	params.Add("g", "h")
 	params.Add("sorted", "false")
 	params.Add("cached", "true")
-	params.Add("strict", "true")
 
 	url := fmt.Sprintf("https://try.wavefront.com/api/v2/chart/api?%s", params.Encode())
 
@@ -98,7 +94,7 @@ func main() {
 	}
 
 	// Add the authorization header
-	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", config.APIToken))
+	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", config.WavefrontToken))
 
 	// Call Wavefront
 	res, err := http.DefaultClient.Do(req)
@@ -116,6 +112,8 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println(string(body))
+
 	// Unmarshal the JSON payload into a struct
 	queryData, err := unmarshalWavefrontQuery(body)
 	if err != nil {
@@ -127,11 +125,11 @@ func main() {
 	var message string
 	pointAverage := queryData.Timeseries[0].Data[0][1]
 	if pointAverage > config.Threshold {
-		message = fmt.Sprintf("ALERT! avg %s: %f", config.Metric, pointAverage)
+		message = fmt.Sprintf("ALERT! avg latency: %f", pointAverage)
 		ioutil.WriteFile("./alert", nil, 0644)
 		updateGitlabVars("failed")
 	} else {
-		message = fmt.Sprintf("No worries, the avg %s is %f (which is less than %f)", config.Metric, pointAverage, config.Threshold)
+		message = fmt.Sprintf("No worries, the avg latency is %f (which is less than %f)", pointAverage, config.Threshold)
 		updateGitlabVars("passed")
 	}
 
@@ -151,7 +149,7 @@ func getEpochMillis(timestamp time.Time) int64 {
 }
 
 func updateGitlabVars(val string) {
-	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "vmware-cloud-advocacy%2f", config.CiProjectName, config.WavefrontVariable)
+	url := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%s/variables/%s", "retgits%2f", config.CiProjectName, config.WavefrontVariable)
 
 	gVar := GitlabVar{
 		Key:   config.WavefrontVariable,
